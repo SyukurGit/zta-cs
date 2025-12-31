@@ -33,7 +33,7 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) error 
 
 	// 3. POLICY CHECK: Rate Limiting (Max 3/day)
 	count, _ := s.Repo.CountRecentSessions(user.ID)
-	if count >= 3 {
+	if count >= 10 {
 		return errors.New("limit exceeded: too many verification attempts today")
 	}
 

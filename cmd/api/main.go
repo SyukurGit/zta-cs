@@ -25,6 +25,14 @@ func main() {
 	verifRepo := repository.NewVerificationRepository(config.DB)
     verifService := service.NewVerificationService(verifRepo)
     verifHandler := handler.NewVerificationHandler(verifService)
+
+// --> TAMBAHAN BARU: CHAT
+    chatRepo := repository.NewChatRepository(config.DB)
+    // Chat service butuh ticketRepo juga untuk validasi
+    chatHandler := handler.NewChatHandler(service.NewChatService(chatRepo, ticketRepo))
+
+
+
 	// --- SETUP ROUTER ---
 	r := gin.Default()
 	
@@ -44,6 +52,8 @@ func main() {
 		userGroup.Use(middleware.EnforceRole(domain.RoleUser)) 
 		{
 			userGroup.POST("/tickets", ticketHandler.CreateTicket)
+			userGroup.POST("/tickets/:id/chat", chatHandler.SendChat)
+            userGroup.GET("/tickets/:id/chat", chatHandler.GetHistory)
 		}
 
 		// GROUP: CS
@@ -54,6 +64,9 @@ func main() {
 			csGroup.GET("/tickets/open", ticketHandler.GetOpenTickets)
 			csGroup.POST("/tickets/:id/claim", ticketHandler.ClaimTicket)
 			csGroup.POST("/tickets/:id/start-verification", verifHandler.StartVerification)
+			csGroup.POST("/tickets/:id/reset-password", ticketHandler.ResetPasswordAction)
+			csGroup.POST("/tickets/:id/chat", chatHandler.SendChat)
+            csGroup.GET("/tickets/:id/chat", chatHandler.GetHistory)
 		}
 	}
 

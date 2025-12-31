@@ -102,3 +102,12 @@ type AnswerInput struct {
     QuestionID uint   `json:"question_id"`
     Answer     string `json:"answer"`
 }
+
+type Chat struct {
+	ID        uint      `gorm:"primaryKey"`
+	TicketID  uint      `gorm:"not null;index"` // Relasi ke Tiket
+	SenderID  uint      `gorm:"not null"`       // ID User atau ID CS
+	SenderRole string   `gorm:"type:enum('USER','CS');not null"` // Siapa yang kirim?
+	Message   string    `gorm:"type:text;not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
