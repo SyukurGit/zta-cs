@@ -64,3 +64,25 @@ func (h *TicketHandler) ClaimTicket(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Ticket successfully claimed. You may now proceed."})
 }
+
+
+// ResetPasswordAction (CS Only)
+func (h *TicketHandler) ResetPasswordAction(c *gin.Context) {
+    csID := c.GetUint("user_id")
+    ticketIDStr := c.Param("id")
+    ticketID, _ := strconv.Atoi(ticketIDStr)
+
+    // Panggil service yang baru kita buat
+    newPass, err := h.Service.ExecuteResetPassword(csID, uint(ticketID))
+    if err != nil {
+        c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "status": "SUCCESS",
+        "message": "Temporary access granted and used successfully.",
+        "new_user_password": newPass,
+        "info": "Share this password securely with the user via phone.",
+    })
+}
