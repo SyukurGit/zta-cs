@@ -1,21 +1,24 @@
 package service
 
 import (
+	"errors"
+	"fmt"
+	"time"
+
 	"github.com/syukurgit/zta/internal/domain"
 	"github.com/syukurgit/zta/internal/repository"
-	"errors"
-    "time"
-    "github.com/syukurgit/zta/pkg/utils" // Pastikan import ini ada
-    "gorm.io/gorm"
-	
+	"github.com/syukurgit/zta/pkg/utils"
+	"gorm.io/gorm"
 )
 
 type TicketService struct {
-	Repo *repository.TicketRepository
+	Repo     *repository.TicketRepository
+	AuditSvc *AuditService // Injeksi Audit Service
 }
 
-func NewTicketService(repo *repository.TicketRepository) *TicketService {
-	return &TicketService{Repo: repo}
+// Constructor diperbarui menerima AuditService
+func NewTicketService(repo *repository.TicketRepository, auditSvc *AuditService) *TicketService {
+	return &TicketService{Repo: repo, AuditSvc: auditSvc}
 }
 
 func (s *TicketService) CreateTicket(userID uint, subject string) (*domain.Ticket, error) {
@@ -33,49 +36,70 @@ func (s *TicketService) GetOpenQueue() ([]domain.Ticket, error) {
 }
 
 func (s *TicketService) ClaimTicket(csID, ticketID uint) error {
-	// Di sinilah nanti kita bisa tambahkan logika "Max 1 active ticket per CS" jika mau
-	return s.Repo.AssignTicketToCS(ticketID, csID)
+	// 1. POLICY CHECK: Max 1 Active Ticket per CS
+	activeCount, err := s.Repo.CountActiveTicketsByCS(csID)
+	if err != nil {
+		return errors.New("system error: failed to check active tickets")
+	}
+
+	if activeCount > 0 {
+		// LOG: Policy Violation
+		s.AuditSvc.LogActivity(csID, "CS", "CLAIM_TICKET", "DENIED", fmt.Sprintf("Ticket: %d, Reason: Active Limit Reached", ticketID))
+		return errors.New("policy violation: you have an active ticket. Please finish or close it first.")
+	}
+
+	// 2. Lanjutkan proses Claim
+	err = s.Repo.AssignTicketToCS(ticketID, csID)
+	if err == nil {
+		// LOG: Success Claim
+		s.AuditSvc.LogActivity(csID, "CS", "CLAIM_TICKET", "SUCCESS", fmt.Sprintf("Ticket: %d", ticketID))
+	}
+	return err
 }
 
 // ExecuteResetPassword: CS melakukan aksi sensitif menggunakan JIT Privilege
 func (s *TicketService) ExecuteResetPassword(csID, ticketID uint) (string, error) {
-    // 1. CEK PRIVILEGE (Zero Trust Core Logic)
-    // Cari privilege yang valid: milik CS ini, untuk tiket ini, belum expired, dan belum dipakai.
-    var privilege domain.TemporaryPrivilege
-    err := s.Repo.DB.Where("cs_id = ? AND ticket_id = ? AND action = ? AND expires_at > ? AND is_used = ?", 
-        csID, ticketID, "RESET_PASSWORD", time.Now(), false).First(&privilege).Error
-    
-    if err != nil {
-        return "", errors.New("ACCESS DENIED: No active privilege found. User verification required.")
-    }
+	// 1. CEK PRIVILEGE (Zero Trust Core Logic)
+	var privilege domain.TemporaryPrivilege
+	err := s.Repo.DB.Where("cs_id = ? AND ticket_id = ? AND action = ? AND expires_at > ? AND is_used = ?",
+		csID, ticketID, "RESET_PASSWORD", time.Now(), false).First(&privilege).Error
 
-    // 2. Ambil Data Tiket untuk tahu User-nya siapa
-    var ticket domain.Ticket
-    if err := s.Repo.DB.First(&ticket, ticketID).Error; err != nil {
-        return "", errors.New("ticket not found")
-    }
+	if err != nil {
+		// LOG: Access Denied (Critical)
+		s.AuditSvc.LogActivity(csID, "CS", "RESET_PASSWORD", "DENIED", fmt.Sprintf("Ticket: %d, Reason: No Valid Privilege", ticketID))
+		return "", errors.New("ACCESS DENIED: No active privilege found. User verification required.")
+	}
 
-    // 3. Generate Password Baru (Random)
-    newPassword := utils.GenerateRandomToken(12) // Password sementara
-    hashedPassword, _ := utils.HashPassword(newPassword)
+	// 2. Ambil Data Tiket
+	var ticket domain.Ticket
+	if err := s.Repo.DB.First(&ticket, ticketID).Error; err != nil {
+		return "", errors.New("ticket not found")
+	}
 
-    // 4. Update Password & Hanguskan Privilege (Transaction)
-    err = s.Repo.DB.Transaction(func(tx *gorm.DB) error {
-        // Update password user
-        if err := tx.Model(&domain.User{}).Where("id = ?", ticket.UserID).Update("password_hash", hashedPassword).Error; err != nil {
-            return err
-        }
+	// 3. Generate Password Baru
+	newPassword := utils.GenerateRandomToken(12)
+	hashedPassword, _ := utils.HashPassword(newPassword)
 
-        // Tandai privilege sudah dipakai (One-time Use)
-        if err := tx.Model(&privilege).Update("is_used", true).Error; err != nil {
-            return err
-        }
-        return nil
-    })
+	// 4. Update Password & Hanguskan Privilege (Transaction)
+	err = s.Repo.DB.Transaction(func(tx *gorm.DB) error {
+		// Update password user
+		if err := tx.Model(&domain.User{}).Where("id = ?", ticket.UserID).Update("password_hash", hashedPassword).Error; err != nil {
+			return err
+		}
 
-    if err != nil {
-        return "", err
-    }
+		// Tandai privilege sudah dipakai (One-time Use)
+		if err := tx.Model(&privilege).Update("is_used", true).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 
-    return newPassword, nil
+	if err != nil {
+		return "", err
+	}
+
+	// LOG: Success Action (Critical)
+	s.AuditSvc.LogActivity(csID, "CS", "RESET_PASSWORD", "SUCCESS", fmt.Sprintf("Ticket: %d", ticketID))
+
+	return newPassword, nil
 }

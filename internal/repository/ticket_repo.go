@@ -63,3 +63,14 @@ func (r *TicketRepository) AssignTicketToCS(ticketID, csID uint) error {
 		return nil
 	})
 }
+
+func (r *TicketRepository) CountActiveTicketsByCS(csID uint) (int64, error) {
+	var count int64
+	// Kita harus join tabel assignment dengan tiket untuk cek statusnya
+	err := r.DB.Table("ticket_assignments").
+		Joins("JOIN tickets ON tickets.id = ticket_assignments.ticket_id").
+		Where("ticket_assignments.cs_id = ? AND tickets.status = ?", csID, "IN_PROGRESS").
+		Count(&count).Error
+	
+	return count, err
+}
