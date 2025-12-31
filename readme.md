@@ -1,6 +1,5 @@
 # 📘 ZTA-CS API README (Zero Trust Customer Service)
 
-Dokumen ini adalah **README resmi API ZTA-CS** yang siap dipakai oleh tim **Frontend, Backend, QA, dan Security**. Ditulis agar **jelas, lengkap, dan tidak ambigu**, sehingga FE bisa langsung implement tanpa bolak-balik tanya.
 
 ---
 
