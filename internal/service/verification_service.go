@@ -21,59 +21,79 @@ func NewVerificationService(repo *repository.VerificationRepository, auditSvc *A
 	return &VerificationService{Repo: repo, AuditSvc: auditSvc}
 }
 
-func (s *VerificationService) StartVerification(ticketID uint, csID uint) error {
+func (s *VerificationService) StartVerification(ticketID uint, csID uint) (string, error) {
 	// 1. Ambil Data User Target
 	user, err := s.Repo.GetUserByTicket(ticketID)
 	if err != nil {
-		return errors.New("ticket or user not found")
+		return "", errors.New("ticket or user not found")
 	}
 
 	// 2. POLICY CHECK: Risk Score
 	if user.RiskScore >= 80 {
-		// LOG: Security Alert
-		s.AuditSvc.LogActivity(csID, "CS", "START_VERIFICATION", "DENIED", fmt.Sprintf("Ticket: %d, RiskScore: %d", ticketID, user.RiskScore))
-		return errors.New("security alert: account is high risk. Escalation required.")
+		s.AuditSvc.LogActivity(
+			csID,
+			"CS",
+			"START_VERIFICATION",
+			"DENIED",
+			fmt.Sprintf("Ticket: %d, RiskScore: %d", ticketID, user.RiskScore),
+		)
+		return "", errors.New("security alert: account is high risk. escalation required")
 	}
 
-	// 3. POLICY CHECK: Rate Limiting (Max 3/day)
+	// 3. POLICY CHECK: Rate Limit
 	count, _ := s.Repo.CountRecentSessions(user.ID)
-	if count >= 3 {
-		// LOG: Rate Limit Hit
-		s.AuditSvc.LogActivity(csID, "CS", "START_VERIFICATION", "DENIED", fmt.Sprintf("Ticket: %d, Reason: Rate Limit Exceeded", ticketID))
-		return errors.New("limit exceeded: too many verification attempts today")
+	if count >= 200 {
+		s.AuditSvc.LogActivity(
+			csID,
+			"CS",
+			"START_VERIFICATION",
+			"DENIED",
+			fmt.Sprintf("Ticket: %d, Reason: Rate Limit Exceeded", ticketID),
+		)
+		return "", errors.New("limit exceeded: too many verification attempts today")
 	}
 
-	// 4. Generate Session ID (Secure Random UUID)
+	// 4. Generate Session ID
 	sessionID := uuid.New().String()
 
-	// 5. Pilih Pertanyaan (Sistem yang memilih, bukan CS)
+	// 5. Pilih Pertanyaan
 	questions, err := s.Repo.GetSecureQuestionSet()
 	if err != nil {
-		return errors.New("system error: failed to generate question set")
+		return "", errors.New("system error: failed to generate question set")
 	}
 
-	// 6. Buat Objek Sesi
+	// 6. Buat Session
 	session := &domain.VerificationSession{
 		ID:        sessionID,
 		TicketID:  ticketID,
 		UserID:    user.ID,
 		Status:    "PENDING",
-		ExpiresAt: time.Now().Add(15 * time.Minute), // Expired dalam 15 menit
+		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}
 
 	// 7. Simpan ke DB
 	if err := s.Repo.CreateSession(session, questions); err != nil {
-		return err
+		return "", err
 	}
 
-	// LOG: Success Start
-	s.AuditSvc.LogActivity(csID, "CS", "START_VERIFICATION", "SUCCESS", fmt.Sprintf("Ticket: %d, Session: %s", ticketID, sessionID))
+	// 8. Audit Log
+	s.AuditSvc.LogActivity(
+		csID,
+		"CS",
+		"START_VERIFICATION",
+		"SUCCESS",
+		fmt.Sprintf("Ticket: %d, Session: %s", ticketID, sessionID),
+	)
 
-	// 8. SIMULASI PENGIRIMAN LINK
-	fmt.Printf("\n[EMAIL SERVICE] Sending to %s: Link: http://localhost:8080/verify/%s\n\n", user.Email, sessionID)
+	// 9. BUILD VERIFICATION URL (INI YANG PENTING)
+	verificationURL := fmt.Sprintf(
+		"http://localhost:3000/verify/%s",
+		sessionID,
+	)
 
-	return nil
+	return verificationURL, nil
 }
+
 
 // GetVerificationQuestions dipanggil saat User membuka link
 func (s *VerificationService) GetVerificationQuestions(sessionID string) ([]domain.VerificationQuestion, error) {

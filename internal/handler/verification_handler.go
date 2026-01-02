@@ -18,22 +18,23 @@ func NewVerificationHandler(s *service.VerificationService) *VerificationHandler
 
 // StartVerification (CS Only)
 func (h *VerificationHandler) StartVerification(c *gin.Context) {
-	ticketIDStr := c.Param("id") // ID Tiket dari URL
+	ticketIDStr := c.Param("id")
 	ticketID, _ := strconv.Atoi(ticketIDStr)
-	csID := c.GetUint("user_id") // ID CS dari Token JWT
+	csID := c.GetUint("user_id")
 
-	err := h.Service.StartVerification(uint(ticketID), csID)
+	verificationURL, err := h.Service.StartVerification(uint(ticketID), csID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Response untuk CS harus minim informasi
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Verification session initialized. Secure link has been sent to the user's email.",
-		"status":  "PENDING",
+		"status": "PENDING",
+		"verification_url": verificationURL,
 	})
 }
+
+
 
 // GetVerificationPage (Public)
 func (h *VerificationHandler) GetVerificationPage(c *gin.Context) {
@@ -65,23 +66,46 @@ func (h *VerificationHandler) SubmitVerification(c *gin.Context) {
 	sessionID := c.Param("token")
 
 	var input struct {
-		Answers map[uint]string `json:"answers" binding:"required"`
+		Answers map[string]string `json:"answers" binding:"required"`
 	}
 
+	// 1. Bind JSON
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input format"})
 		return
 	}
 
-	passed, err := h.Service.SubmitAnswers(sessionID, input.Answers)
+	// 2. Convert key string -> uint
+	answers := make(map[uint]string)
+
+	for k, v := range input.Answers {
+		id, err := strconv.ParseUint(k, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid question ID"})
+			return
+		}
+		answers[uint(id)] = v
+	}
+
+	// 3. Submit ke service
+	passed, err := h.Service.SubmitAnswers(sessionID, answers)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "System error processing answers"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "System error processing answers",
+		})
 		return
 	}
 
+	// 4. Response akhir
 	if passed {
-		c.JSON(http.StatusOK, gin.H{"status": "PASSED", "message": "Identity verified. Support agent has been notified."})
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "PASSED",
+			"message": "Identity verified. Support agent has been notified.",
+		})
 	} else {
-		c.JSON(http.StatusForbidden, gin.H{"status": "FAILED", "message": "Verification failed. Access denied."})
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "FAILED",
+			"message": "Verification failed. Access denied.",
+		})
 	}
 }

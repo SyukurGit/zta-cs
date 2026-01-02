@@ -8,6 +8,8 @@ import (
 	"github.com/syukurgit/zta/internal/middleware"
 	"github.com/syukurgit/zta/internal/repository"
 	"github.com/syukurgit/zta/internal/service"
+	"github.com/gin-contrib/cors"
+
 )
 
 func main() {
@@ -45,6 +47,14 @@ func main() {
 
 	// --- SETUP ROUTER ---
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	// Public Route
 	r.POST("/login", authHandler.Login)

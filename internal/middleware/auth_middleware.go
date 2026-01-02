@@ -53,3 +53,4 @@ func EnforceRole(allowedRole string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+

@@ -111,3 +111,5 @@ type Chat struct {
 	Message   string    `gorm:"type:text;not null"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
 }
+
+
