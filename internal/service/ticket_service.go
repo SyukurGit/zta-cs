@@ -103,3 +103,73 @@ func (s *TicketService) ExecuteResetPassword(csID, ticketID uint) (string, error
 
 	return newPassword, nil
 }
+
+
+// internal/service/ticket_service.go
+
+func (s *TicketService) CloseTicket(ticketID uint, requestorID uint, role string) error {
+	// 1. Ambil data tiket
+	ticket, err := s.Repo.GetByID(ticketID)
+	if err != nil {
+		return errors.New("ticket not found")
+	}
+
+	// 2. Cek Otoritas
+	if role == domain.RoleUser && ticket.UserID != requestorID {
+		return errors.New("unauthorized: you don't own this ticket")
+	}
+    
+    // Jika CS, pastikan dia yang memegang tiket ini (opsional tapi bagus untuk ZTA)
+    if role == domain.RoleCS {
+        // Logika tambahan bisa ditambahkan di sini untuk cek assignment
+    }
+
+	// 3. Update Status
+	err = s.Repo.UpdateStatus(ticketID, "CLOSED")
+	if err == nil {
+		// LOG: Audit Trail (Penting!)
+		s.AuditSvc.LogActivity(requestorID, role, "CLOSE_TICKET", "SUCCESS", fmt.Sprintf("Ticket: %d", ticketID))
+	}
+	return err
+}
+
+
+// GetUserTickets mengambil semua tiket milik user tertentu
+func (s *TicketService) GetUserTickets(userID uint) ([]domain.Ticket, error) {
+    var tickets []domain.Ticket
+    // Preload User supaya data user tidak null (opsional, tapi bagus)
+    err := s.Repo.DB.Preload("User").Where("user_id = ?", userID).Order("created_at desc").Find(&tickets).Error
+    return tickets, err
+}
+
+// GetCSActiveTickets mengambil tiket yang sedang dikerjakan CS tertentu
+// GetCSActiveTickets mengambil tiket yang sedang dikerjakan CS tertentu
+func (s *TicketService) GetCSActiveTickets(csID uint) ([]domain.Ticket, error) {
+    var tickets []domain.Ticket
+    
+    // PERBAIKAN: Gunakan JOIN ke tabel ticket_assignments
+    // Karena AssignTicketToCS menyimpan relasi di tabel assignments, bukan di kolom tickets.cs_id
+    err := s.Repo.DB.Preload("User").
+        Joins("JOIN ticket_assignments ON ticket_assignments.ticket_id = tickets.id").
+        Where("ticket_assignments.cs_id = ? AND tickets.status = ?", csID, "IN_PROGRESS").
+        Order("tickets.updated_at desc").
+        Find(&tickets).Error
+        
+    return tickets, err
+}
+
+// internal/service/ticket_service.go
+
+// GetCSHistory mengambil tiket yang SUDAH diselesaikan (CLOSED) oleh CS tertentu
+func (s *TicketService) GetCSHistory(csID uint) ([]domain.Ticket, error) {
+    var tickets []domain.Ticket
+    
+    // Logic: Ambil tiket yang statusnya CLOSED dan pernah di-assign ke CS ini
+    err := s.Repo.DB.Preload("User").
+        Joins("JOIN ticket_assignments ON ticket_assignments.ticket_id = tickets.id").
+        Where("ticket_assignments.cs_id = ? AND tickets.status = ?", csID, "CLOSED").
+        Order("tickets.updated_at desc").
+        Find(&tickets).Error
+        
+    return tickets, err
+}

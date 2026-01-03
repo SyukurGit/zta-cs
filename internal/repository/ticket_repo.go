@@ -74,3 +74,9 @@ func (r *TicketRepository) CountActiveTicketsByCS(csID uint) (int64, error) {
 	
 	return count, err
 }
+
+// internal/repository/ticket_repo.go
+
+func (r *TicketRepository) UpdateStatus(ticketID uint, status string) error {
+	return r.DB.Model(&domain.Ticket{}).Where("id = ?", ticketID).Update("status", status).Error
+}

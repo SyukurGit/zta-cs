@@ -74,6 +74,11 @@ func main() {
 			// Fitur Chat User
 			userGroup.POST("/tickets/:id/chat", chatHandler.SendChat)
 			userGroup.GET("/tickets/:id/chat", chatHandler.GetHistory)
+			userGroup.POST("/tickets/:id/close", ticketHandler.CloseTicket)
+			userGroup.GET("/tickets", ticketHandler.GetUserTickets)      // <--- TAMBAHKAN INI
+			userGroup.GET("/tickets/:id", ticketHandler.GetTicketDetail)
+			
+			
 		}
 
 		// GROUP: CS
@@ -84,9 +89,14 @@ func main() {
 			csGroup.POST("/tickets/:id/claim", ticketHandler.ClaimTicket) // Limit 1 Tiket ada di Service
 			csGroup.POST("/tickets/:id/start-verification", verifHandler.StartVerification)
 			csGroup.POST("/tickets/:id/reset-password", ticketHandler.ResetPasswordAction)
+			csGroup.GET("/tickets/history", ticketHandler.GetCSHistory) // <--- PENTING: Taruh History di sini
 			// Fitur Chat CS
 			csGroup.POST("/tickets/:id/chat", chatHandler.SendChat)
 			csGroup.GET("/tickets/:id/chat", chatHandler.GetHistory)
+			csGroup.POST("/tickets/:id/close", ticketHandler.CloseTicket)
+			csGroup.GET("/tickets/mine", ticketHandler.GetCSActiveTickets) // <--- TAMBAHKAN INI
+			csGroup.GET("/tickets/:id", ticketHandler.GetTicketDetail)
+			
 		}
 
 		// GROUP: AUDITOR (NEW)
