@@ -45,3 +45,4 @@ func (s *AuditService) LogActivity(actorID uint, role, action, result, contextDa
 func (s *AuditService) GetAuditTrail() ([]domain.AuditLog, error) {
 	return s.Repo.GetAllLogs()
 }
+
