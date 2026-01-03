@@ -14,7 +14,7 @@ import (
 
 func main() {
 	config.ConnectDB()
-	// config.MigrateDB() // Uncomment sekali saja saat deployment awal untuk update struktur tabel
+	config.MigrateDB() // Uncomment sekali saja saat deployment awal untuk update struktur tabel
 
 	// --- SETUP LAYERS ---
 
@@ -64,9 +64,12 @@ func main() {
 	r.POST("/verify/:token", verifHandler.SubmitVerification)
 
 	api := r.Group("/api")
-	api.GET("/audit/tickets/:id", auditHandler.GetLogsByTicket)
 	api.Use(middleware.AuthMiddleware())
 	{
+
+
+			api.GET("/audit/tickets/:id", auditHandler.GetLogsByTicket)
+
 		// GROUP: USER
 		userGroup := api.Group("/user")
 		userGroup.Use(middleware.EnforceRole(domain.RoleUser))

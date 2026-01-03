@@ -15,29 +15,30 @@ func NewAuditService(repo *repository.AuditRepository) *AuditService {
 	return &AuditService{Repo: repo}
 }
 
-// LogActivity adalah fungsi helper pusat untuk mencatat kegiatan
-// internal/service/audit_service.go
+// LogActivity DIPERBARUI: Parameter pertama sekarang ticketID
 func (s *AuditService) LogActivity(ticketID uint, actorID uint, role, action, result, contextData string) {
-    actorHash := ""
-    if role == domain.RoleCS {
-        actorHash = utils.AnonymizeID(actorID)
-    } else {
-        actorHash = fmt.Sprintf("USER-%d", actorID)
-    }
+	actorHash := ""
+	if role == domain.RoleCS {
+		actorHash = utils.AnonymizeID(actorID)
+	} else {
+		actorHash = fmt.Sprintf("USER-%d", actorID)
+	}
 
-    log := &domain.AuditLog{
-        TicketID:  ticketID, // Simpan ID Tiket
-        ActorHash: actorHash,
-        ActorRole: role,
-        Action:    action,
-        Result:    result,
-        Context:   contextData,
-    }
-    _ = s.Repo.CreateLog(log)
+	log := &domain.AuditLog{
+		TicketID:  ticketID, // Simpan ID Tiket
+		ActorHash: actorHash,
+		ActorRole: role,
+		Action:    action,
+		Result:    result,
+		Context:   contextData,
+	}
+
+	// Cetak error di console kalau gagal simpan (buat debug)
+	if err := s.Repo.CreateLog(log); err != nil {
+		fmt.Printf("❌ Gagal simpan audit log: %v\n", err)
+	}
 }
 
-// GetAuditTrail untuk dashboard Auditor
 func (s *AuditService) GetAuditTrail() ([]domain.AuditLog, error) {
 	return s.Repo.GetAllLogs()
 }
-

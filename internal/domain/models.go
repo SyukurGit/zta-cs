@@ -87,16 +87,15 @@ type TemporaryPrivilege struct {
 // 7. AuditLog: Log Immutable untuk Auditor
 // internal/domain/models.go
 type AuditLog struct {
-    ID        uint      `gorm:"primaryKey"`
-    TicketID  uint      `gorm:"index"` // Tambahkan ini agar bisa di-filter per tiket
-    ActorHash string    `gorm:"not null"`
-    ActorRole string    `gorm:"not null"`
-    Action    string    `gorm:"not null"`
-    Result    string    `gorm:"not null"`
-    Context   string    `gorm:"type:text"`
-    Timestamp time.Time `gorm:"autoCreateTime"`
+	ID        uint      `gorm:"primaryKey"`
+	TicketID  uint      `gorm:"index"` // <--- WAJIB ADA: Biar bisa difilter per tiket
+	ActorHash string    `gorm:"not null"`
+	ActorRole string    `gorm:"not null"`
+	Action    string    `gorm:"not null"`
+	Result    string    `gorm:"not null"`
+	Context   string    `gorm:"type:text"` // <--- Ubah jadi TEXT biar aman
+	Timestamp time.Time `gorm:"autoCreateTime"`
 }
-
 type VerificationAttempt struct {
     ID         uint   `gorm:"primaryKey"`
     SessionID  string `gorm:"size:64;not null"`

@@ -62,6 +62,7 @@ func MigrateDB() {
 		&domain.TemporaryPrivilege{},
 		&domain.AuditLog{},
 		&domain.VerificationAttempt{},
+		&domain.VerificationSession{}, // Tabel anak
 	)
 
 	if err != nil {

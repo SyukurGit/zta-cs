@@ -30,14 +30,17 @@ func (h *AuditHandler) GetLogs(c *gin.Context) {
 }
 
 
-// Tambahkan method ini
+
+
 func (h *AuditHandler) GetLogsByTicket(c *gin.Context) {
-    ticketID, _ := strconv.Atoi(c.Param("id"))
-    logs, err := h.Service.Repo.GetLogsByTicket(uint(ticketID)) // Panggil repo langsung atau via service
+    ticketIDStr := c.Param("id")
+    ticketID, _ := strconv.Atoi(ticketIDStr)
+
+    // Langsung panggil repo via service (atau tambahkan method di service dulu idealnya, tapi ini shortcut aman)
+    logs, err := h.Service.Repo.GetLogsByTicket(uint(ticketID))
     if err != nil {
-        c.JSON(500, gin.H{"error": "Gagal ambil log"})
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal ambil log tiket"})
         return
     }
-    c.JSON(200, logs)
+    c.JSON(http.StatusOK, logs)
 }
-

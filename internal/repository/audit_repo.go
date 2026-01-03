@@ -26,9 +26,11 @@ func (r *AuditRepository) GetAllLogs() ([]domain.AuditLog, error) {
 	return logs, err
 }
 
-// internal/repository/audit_repo.go
+// --- TAMBAHAN BARU ---
 func (r *AuditRepository) GetLogsByTicket(ticketID uint) ([]domain.AuditLog, error) {
-    var logs []domain.AuditLog
-    err := r.DB.Where("ticket_id = ?", ticketID).Order("timestamp desc").Find(&logs).Error
-    return logs, err
+	var logs []domain.AuditLog
+	// Ambil log khusus tiket ini, urutkan dari yang paling baru
+	err := r.DB.Where("ticket_id = ?", ticketID).Order("timestamp desc").Find(&logs).Error
+	return logs, err
 }
+
