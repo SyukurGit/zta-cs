@@ -49,14 +49,19 @@ type TicketAssignment struct {
 }
 
 // 4. VerificationSession: Sesi verifikasi yang dikendalikan sistem
+// internal/domain/models.go
+
 type VerificationSession struct {
-	ID        string `gorm:"primaryKey;type:varchar(64)"` // UUID
-	TicketID  uint   `gorm:"not null"`
-	UserID    uint   `gorm:"not null"`
-	Status    string `gorm:"type:enum('PENDING','PASSED','FAILED','EXPIRED');default:'PENDING'"`
-	ExpiresAt time.Time `gorm:"not null"` // Time-limited session
-	CreatedAt time.Time
-	User      User      `gorm:"foreignKey:UserID"`
+    ID           string    `gorm:"primaryKey;type:varchar(64)"` // UUID
+    TicketID     uint      `gorm:"not null"`
+    UserID       uint      `gorm:"not null"`
+    Status       string    `gorm:"type:enum('PENDING','PASSED','FAILED','EXPIRED');default:'PENDING'"`
+    AttemptCount int       `gorm:"default:0"` // Kolom yang baru ditambahkan
+    ExpiresAt    time.Time `gorm:"not null"`
+    CreatedAt    time.Time
+    
+    // Hubungan ini WAJIB ada agar Preload("User") berfungsi
+    User         User      `gorm:"foreignKey:UserID"` 
 }
 
 // 5. VerificationQuestion: Bank soal (kategori statis)
@@ -80,14 +85,16 @@ type TemporaryPrivilege struct {
 }
 
 // 7. AuditLog: Log Immutable untuk Auditor
+// internal/domain/models.go
 type AuditLog struct {
-	ID        uint      `gorm:"primaryKey"`
-	ActorHash string    `gorm:"not null"` // ID CS di-hash agar anonim bagi data analyst biasa
-	ActorRole string    `gorm:"not null"`
-	Action    string    `gorm:"not null"`
-	Result    string    `gorm:"not null"` // SUCCESS / DENIED
-	Context   string    `gorm:"type:json"` // Metadata tambahan
-	Timestamp time.Time `gorm:"autoCreateTime"`
+    ID        uint      `gorm:"primaryKey"`
+    TicketID  uint      `gorm:"index"` // Tambahkan ini agar bisa di-filter per tiket
+    ActorHash string    `gorm:"not null"`
+    ActorRole string    `gorm:"not null"`
+    Action    string    `gorm:"not null"`
+    Result    string    `gorm:"not null"`
+    Context   string    `gorm:"type:text"`
+    Timestamp time.Time `gorm:"autoCreateTime"`
 }
 
 type VerificationAttempt struct {

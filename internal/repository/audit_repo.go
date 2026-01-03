@@ -25,3 +25,10 @@ func (r *AuditRepository) GetAllLogs() ([]domain.AuditLog, error) {
 	err := r.DB.Order("timestamp desc").Find(&logs).Error
 	return logs, err
 }
+
+// internal/repository/audit_repo.go
+func (r *AuditRepository) GetLogsByTicket(ticketID uint) ([]domain.AuditLog, error) {
+    var logs []domain.AuditLog
+    err := r.DB.Where("ticket_id = ?", ticketID).Order("timestamp desc").Find(&logs).Error
+    return logs, err
+}

@@ -82,13 +82,15 @@ func (r *VerificationRepository) CreateSession(session *domain.VerificationSessi
 
 
 // GetSessionByID mengambil data sesi beserta User-nya (untuk cek risk score/email)
+// internal/repository/verification_repo.go
+
 func (r *VerificationRepository) GetSessionByID(sessionID string) (*domain.VerificationSession, error) {
-	var session domain.VerificationSession
-	// Preload User penting untuk nanti kita tahu siapa yang sedang diverifikasi
-	if err := r.DB.Preload("User").First(&session, "id = ?", sessionID).Error; err != nil {
-		return nil, err
-	}
-	return &session, nil
+    var session domain.VerificationSession
+    // Error "unsupported relations" muncul di sini jika struct di atas tidak punya field User
+    if err := r.DB.Preload("User").First(&session, "id = ?", sessionID).Error; err != nil {
+        return nil, err
+    }
+    return &session, nil
 }
 
 // GetQuestionsBySession mengambil daftar pertanyaan yang SUDAH dipilihkan untuk sesi ini

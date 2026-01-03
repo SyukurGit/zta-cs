@@ -21,6 +21,7 @@ func NewVerificationService(repo *repository.VerificationRepository, auditSvc *A
 	return &VerificationService{Repo: repo, AuditSvc: auditSvc}
 }
 
+// StartVerification: Memulai sesi dan mengirim link
 func (s *VerificationService) StartVerification(ticketID uint, csID uint) (string, error) {
 	// 1. Ambil Data User Target
 	user, err := s.Repo.GetUserByTicket(ticketID)
@@ -31,11 +32,12 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) (strin
 	// 2. POLICY CHECK: Risk Score
 	if user.RiskScore >= 80 {
 		s.AuditSvc.LogActivity(
+			ticketID, // TicketID (Updated Signature)
 			csID,
 			"CS",
 			"START_VERIFICATION",
 			"DENIED",
-			fmt.Sprintf("Ticket: %d, RiskScore: %d", ticketID, user.RiskScore),
+			fmt.Sprintf("RiskScore: %d", user.RiskScore),
 		)
 		return "", errors.New("security alert: account is high risk. escalation required")
 	}
@@ -44,11 +46,12 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) (strin
 	count, _ := s.Repo.CountRecentSessions(user.ID)
 	if count >= 200 {
 		s.AuditSvc.LogActivity(
+			ticketID,
 			csID,
 			"CS",
 			"START_VERIFICATION",
 			"DENIED",
-			fmt.Sprintf("Ticket: %d, Reason: Rate Limit Exceeded", ticketID),
+			"Reason: Rate Limit Exceeded",
 		)
 		return "", errors.New("limit exceeded: too many verification attempts today")
 	}
@@ -64,11 +67,12 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) (strin
 
 	// 6. Buat Session
 	session := &domain.VerificationSession{
-		ID:        sessionID,
-		TicketID:  ticketID,
-		UserID:    user.ID,
-		Status:    "PENDING",
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		ID:           sessionID,
+		TicketID:     ticketID,
+		UserID:       user.ID,
+		Status:       "PENDING",
+		AttemptCount: 0,
+		ExpiresAt:    time.Now().Add(15 * time.Minute),
 	}
 
 	// 7. Simpan ke DB
@@ -78,14 +82,15 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) (strin
 
 	// 8. Audit Log
 	s.AuditSvc.LogActivity(
+		ticketID,
 		csID,
 		"CS",
 		"START_VERIFICATION",
 		"SUCCESS",
-		fmt.Sprintf("Ticket: %d, Session: %s", ticketID, sessionID),
+		fmt.Sprintf("Session Created: %s", sessionID),
 	)
 
-	// 9. BUILD VERIFICATION URL (INI YANG PENTING)
+	// 9. BUILD VERIFICATION URL
 	verificationURL := fmt.Sprintf(
 		"http://localhost:3000/verify/%s",
 		sessionID,
@@ -93,7 +98,6 @@ func (s *VerificationService) StartVerification(ticketID uint, csID uint) (strin
 
 	return verificationURL, nil
 }
-
 
 // GetVerificationQuestions dipanggil saat User membuka link
 func (s *VerificationService) GetVerificationQuestions(sessionID string) ([]domain.VerificationQuestion, error) {
@@ -104,65 +108,89 @@ func (s *VerificationService) GetVerificationQuestions(sessionID string) ([]doma
 
 	// Cek: Apakah sesi sudah kadaluarsa atau sudah selesai?
 	if time.Now().After(session.ExpiresAt) || session.Status != "PENDING" {
-		return nil, errors.New("session expired or already processed")
+		return nil, errors.New("session expired, closed, or already processed")
 	}
 
-	// Ambil pertanyaan (tapi nanti Handler harus pastikan jawaban/hash tidak dikirim ke JSON)
+	// Ambil pertanyaan
 	return s.Repo.GetQuestionsBySession(sessionID)
 }
 
-// SubmitAnswers dipanggil saat User mengirim jawaban
+// SubmitAnswers dipanggil saat User mengirim jawaban (LOGIC 3 STRIKES)
 func (s *VerificationService) SubmitAnswers(sessionID string, answers map[uint]string) (bool, error) {
+	// 1. Ambil Session
 	session, err := s.Repo.GetSessionByID(sessionID)
 	if err != nil {
 		return false, errors.New("invalid session")
 	}
 
 	if session.Status != "PENDING" {
-		return false, errors.New("session is not pending")
+		return false, errors.New("sesi sudah tidak aktif")
 	}
 
-	// 1. Ambil Kunci Jawaban (Hash) dari DB
+	// 2. Ambil Kunci Jawaban
 	questions, _ := s.Repo.GetQuestionsBySession(sessionID)
-
 	allCorrect := true
 
-	// 2. Periksa Jawaban Satu per Satu
+	// 3. Periksa Jawaban
 	for _, q := range questions {
 		userAnswer, provided := answers[q.ID]
 		if !provided {
-			allCorrect = false // Ada pertanyaan yang tidak dijawab
+			allCorrect = false
 			break
 		}
-
-		// Bandingkan Jawaban User vs Hash di Database
 		if !utils.CheckPasswordHash(userAnswer, q.AnswerHash) {
 			allCorrect = false
-			break // Salah satu saja, langsung FAIL
+			break
 		}
 	}
 
-	// 3. DECISION MAKING (The Zero Trust Guard)
+	// 4. JIKA JAWABAN SALAH (Handle Attempt Count)
 	if !allCorrect {
-		// HUKUMAN: Risk Score +20
-		s.Repo.UpdateSessionResult(sessionID, "FAILED", 20)
+		session.AttemptCount++
+		sisa := 3 - session.AttemptCount
 		
-		// LOG: Verification Failed
-		s.AuditSvc.LogActivity(session.UserID, "USER", "VERIFY_ANSWERS", "FAILED", fmt.Sprintf("Session: %s", sessionID))
-		
-		return false, nil // Return false tapi tidak error (artinya proses valid, hasilnya fail)
+		var msg string
+		newStatus := "PENDING" // Default tetap pending jika masih ada sisa
+
+		// Cek Sisa Percobaan
+		if sisa <= 0 {
+			msg = "Sesi ini ditutup, akses dikunci. User harus buat tiket baru."
+			newStatus = "FAILED"
+		} else {
+			msg = fmt.Sprintf("User mengisi tapi salah. Sisa %d kali percobaan.", sisa)
+		}
+
+		// Update DB: AttemptCount & Status
+		// Menggunakan map untuk update spesifik agar tidak menimpa field lain
+		s.Repo.DB.Model(&session).Updates(map[string]interface{}{
+			"attempt_count": session.AttemptCount,
+			"status":        newStatus,
+		})
+
+		// Log Aktivitas Gagal
+		s.AuditSvc.LogActivity(
+			session.TicketID,
+			session.UserID,
+			"USER",
+			"VERIFICATION_ATTEMPT",
+			"FAILED",
+			fmt.Sprintf("Session: %s, Attempt: %d, Result: %s", sessionID, session.AttemptCount, newStatus),
+		)
+
+		return false, errors.New(msg)
 	}
 
-	// 4. HADIAH (SUCCESS): Grant JIT Privilege
+	// 5. JIKA BERHASIL (SUCCESS): Berikan Privilege 'SEND_RESET_LINK' ke CS
 	csID, err := s.Repo.GetCSByTicket(session.TicketID)
 	if err != nil {
 		return true, errors.New("system error: ticket is not assigned to any CS")
 	}
 
+	// Buat Privilege untuk CS agar bisa klik tombol "Send Reset Link"
 	privilege := &domain.TemporaryPrivilege{
 		CSID:      csID,
 		TicketID:  session.TicketID,
-		Action:    "RESET_PASSWORD",
+		Action:    "SEND_RESET_LINK",
 		Token:     utils.GenerateRandomToken(32),
 		GrantedAt: time.Now(),
 		ExpiresAt: time.Now().Add(5 * time.Minute),
@@ -175,8 +203,15 @@ func (s *VerificationService) SubmitAnswers(sessionID string, answers map[uint]s
 	// Tandai sesi lulus
 	s.Repo.UpdateSessionResult(sessionID, "PASSED", 0)
 
-	// LOG: Verification Passed & Privilege Granted
-	s.AuditSvc.LogActivity(session.UserID, "USER", "VERIFY_ANSWERS", "PASSED", fmt.Sprintf("Session: %s, Privilege Granted to CS", sessionID))
+	// LOG: Verification Passed
+	s.AuditSvc.LogActivity(
+		session.TicketID,
+		session.UserID,
+		"USER",
+		"VERIFICATION_SUCCESS",
+		"PASSED",
+		"User berhasil menjawab pertanyaan. Akses dibuka untuk CS.",
+	)
 
 	return true, nil
 }

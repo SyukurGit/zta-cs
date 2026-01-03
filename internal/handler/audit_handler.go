@@ -1,9 +1,11 @@
 package handler
 
 import (
-    "net/http"
-    "github.com/gin-gonic/gin"
-    "github.com/syukurgit/zta/internal/service"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/syukurgit/zta/internal/service"
 )
 
 type AuditHandler struct {
@@ -26,3 +28,16 @@ func (h *AuditHandler) GetLogs(c *gin.Context) {
     // Ini agar konsisten dengan endpoint Ticket/Chat dan memudahkan Frontend axios.
     c.JSON(http.StatusOK, logs) 
 }
+
+
+// Tambahkan method ini
+func (h *AuditHandler) GetLogsByTicket(c *gin.Context) {
+    ticketID, _ := strconv.Atoi(c.Param("id"))
+    logs, err := h.Service.Repo.GetLogsByTicket(uint(ticketID)) // Panggil repo langsung atau via service
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Gagal ambil log"})
+        return
+    }
+    c.JSON(200, logs)
+}
+

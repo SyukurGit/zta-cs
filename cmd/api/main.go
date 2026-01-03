@@ -64,6 +64,7 @@ func main() {
 	r.POST("/verify/:token", verifHandler.SubmitVerification)
 
 	api := r.Group("/api")
+	api.GET("/audit/tickets/:id", auditHandler.GetLogsByTicket)
 	api.Use(middleware.AuthMiddleware())
 	{
 		// GROUP: USER
