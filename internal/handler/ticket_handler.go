@@ -175,3 +175,27 @@ func (h *TicketHandler) GetCSHistory(c *gin.Context) {
 
     c.JSON(http.StatusOK, tickets)
 }
+
+// internal/handler/ticket_handler.go
+
+// Struct input JSON
+type ResetPasswordRequest struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
+func (h *TicketHandler) SubmitUserResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.Service.ProcessUserResetPassword(req.Token, req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password berhasil diubah. Silakan login kembali."})
+}

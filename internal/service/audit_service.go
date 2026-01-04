@@ -16,27 +16,26 @@ func NewAuditService(repo *repository.AuditRepository) *AuditService {
 }
 
 // LogActivity DIPERBARUI: Parameter pertama sekarang ticketID
+// internal/service/audit_service.go
+
 func (s *AuditService) LogActivity(ticketID uint, actorID uint, role, action, result, contextData string) {
 	actorHash := ""
 	if role == domain.RoleCS {
+		// Anonymize CS ID menggunakan Hash
 		actorHash = utils.AnonymizeID(actorID)
 	} else {
 		actorHash = fmt.Sprintf("USER-%d", actorID)
 	}
 
 	log := &domain.AuditLog{
-		TicketID:  ticketID, // Simpan ID Tiket
+		TicketID:  ticketID,
 		ActorHash: actorHash,
 		ActorRole: role,
 		Action:    action,
 		Result:    result,
 		Context:   contextData,
 	}
-
-	// Cetak error di console kalau gagal simpan (buat debug)
-	if err := s.Repo.CreateLog(log); err != nil {
-		fmt.Printf("❌ Gagal simpan audit log: %v\n", err)
-	}
+	_ = s.Repo.CreateLog(log)
 }
 
 func (s *AuditService) GetAuditTrail() ([]domain.AuditLog, error) {

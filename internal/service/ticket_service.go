@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"gorm.io/gorm"
 
 	"github.com/syukurgit/zta/internal/domain"
 	"github.com/syukurgit/zta/internal/repository"
@@ -190,4 +191,46 @@ func (s *TicketService) GetCSHistory(csID uint) ([]domain.Ticket, error) {
 		Find(&tickets).Error
 		
 	return tickets, err
+}
+
+
+// internal/service/ticket_service.go
+
+func (s *TicketService) ProcessUserResetPassword(token, newPassword string) error {
+	// 1. Validasi Token
+	priv, err := s.Repo.GetPrivilegeByToken(token)
+	if err != nil {
+		return errors.New("invalid or expired token")
+	}
+
+	// 2. Ambil Ticket untuk tahu User-nya siapa
+	ticket, err := s.Repo.GetByID(priv.TicketID)
+	if err != nil {
+		return errors.New("ticket context not found")
+	}
+
+	// 3. Hash Password Baru
+	hashedPwd, _ := utils.HashPassword(newPassword)
+
+	// 4. Eksekusi Update (Transaction)
+	err = s.Repo.DB.Transaction(func(tx *gorm.DB) error {
+		// Update Password User
+		if err := tx.Model(&domain.User{}).Where("id = ?", ticket.UserID).Update("password_hash", hashedPwd).Error; err != nil {
+			return err
+		}
+		// Tandai Token Hangus
+		if err := tx.Model(&domain.TemporaryPrivilege{}).Where("id = ?", priv.ID).Update("is_used", true).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.AuditSvc.LogActivity(ticket.ID, ticket.UserID, "USER", "SET_NEW_PASSWORD", "FAILED", "Database error during update")
+		return err
+	}
+
+	// 5. Log Sukses
+	s.AuditSvc.LogActivity(ticket.ID, ticket.UserID, "USER", "SET_NEW_PASSWORD", "SUCCESS", "User successfully reset their password")
+	return nil
 }

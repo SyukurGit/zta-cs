@@ -6,7 +6,7 @@ import (
 )
 
 
-// --- TAMBAHKAN INI ---
+
 const (
 	RoleUser    = "USER"
 	RoleCS      = "CS"
@@ -86,16 +86,22 @@ type TemporaryPrivilege struct {
 
 // 7. AuditLog: Log Immutable untuk Auditor
 // internal/domain/models.go
+// internal/domain/models.go
+
 type AuditLog struct {
 	ID        uint      `gorm:"primaryKey"`
-	TicketID  uint      `gorm:"index"` // <--- WAJIB ADA: Biar bisa difilter per tiket
-	ActorHash string    `gorm:"not null"`
+	TicketID  uint      `gorm:"index;not null"` // Link ke Tiket
+	ActorHash string    `gorm:"not null"`       // ID CS yang disamarkan
 	ActorRole string    `gorm:"not null"`
 	Action    string    `gorm:"not null"`
-	Result    string    `gorm:"not null"`
-	Context   string    `gorm:"type:text"` // <--- Ubah jadi TEXT biar aman
+	Result    string    `gorm:"not null"`       // SUCCESS / DENIED
+	Context   string    `gorm:"type:text"`      // Detail aktivitas
 	Timestamp time.Time `gorm:"autoCreateTime"`
+	
+	// Relation untuk mempermudah pengambilan data
+	Ticket Ticket `gorm:"foreignKey:TicketID"`
 }
+
 type VerificationAttempt struct {
     ID         uint   `gorm:"primaryKey"`
     SessionID  string `gorm:"size:64;not null"`

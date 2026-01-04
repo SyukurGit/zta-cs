@@ -80,3 +80,20 @@ func (r *TicketRepository) CountActiveTicketsByCS(csID uint) (int64, error) {
 func (r *TicketRepository) UpdateStatus(ticketID uint, status string) error {
 	return r.DB.Model(&domain.Ticket{}).Where("id = ?", ticketID).Update("status", status).Error
 }
+
+// internal/repository/ticket_repo.go
+
+func (r *TicketRepository) GetPrivilegeByToken(token string) (*domain.TemporaryPrivilege, error) {
+	var priv domain.TemporaryPrivilege
+	err := r.DB.Where("token = ? AND action = ? AND is_used = ? AND expires_at > NOW()", 
+		token, "USER_SET_PASSWORD", false).First(&priv).Error
+	return &priv, err
+}
+
+func (r *TicketRepository) UpdateUserPassword(userID uint, hashedPassword string) error {
+	return r.DB.Model(&domain.User{}).Where("id = ?", userID).Update("password_hash", hashedPassword).Error
+}
+
+func (r *TicketRepository) MarkPrivilegeUsed(privilegeID uint) error {
+	return r.DB.Model(&domain.TemporaryPrivilege{}).Where("id = ?", privilegeID).Update("is_used", true).Error
+}

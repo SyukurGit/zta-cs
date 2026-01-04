@@ -26,11 +26,25 @@ func (r *AuditRepository) GetAllLogs() ([]domain.AuditLog, error) {
 	return logs, err
 }
 
-// --- TAMBAHAN BARU ---
-func (r *AuditRepository) GetLogsByTicket(ticketID uint) ([]domain.AuditLog, error) {
-	var logs []domain.AuditLog
-	// Ambil log khusus tiket ini, urutkan dari yang paling baru
-	err := r.DB.Where("ticket_id = ?", ticketID).Order("timestamp desc").Find(&logs).Error
-	return logs, err
+
+
+// internal/repository/audit_repo.go
+
+// internal/repository/audit_repo.go
+
+func (r *AuditRepository) GetAuditReports() ([]domain.Ticket, error) {
+	var tickets []domain.Ticket
+	// Mengambil daftar tiket yang memiliki log audit
+	err := r.DB.Preload("User").
+		Joins("JOIN audit_logs ON audit_logs.ticket_id = tickets.id").
+		Group("tickets.id").
+		Order("tickets.updated_at desc").
+		Find(&tickets).Error
+	return tickets, err
 }
 
+func (r *AuditRepository) GetLogsByTicket(ticketID uint) ([]domain.AuditLog, error) {
+	var logs []domain.AuditLog
+	err := r.DB.Where("ticket_id = ?", ticketID).Order("timestamp asc").Find(&logs).Error
+	return logs, err
+}
